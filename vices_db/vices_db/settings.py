@@ -181,9 +181,15 @@ REST_FRAMEWORK = {
 }
 
 # CORS settings
-CORS_ALLOWED_ORIGINS = [
-    'https://vices-app.com', 
-    'https://www.vices-app.com']
+cors_origins = os.getenv('CORS_ALLOWED_ORIGINS', '')
+if cors_origins:
+    CORS_ALLOWED_ORIGINS = [origin.strip() for origin in cors_origins.split(',')]
+else:
+    # Fallback for development
+    CORS_ALLOWED_ORIGINS = [
+        'https://vices-app.com',
+        'https://www.vices-app.com'
+    ]
 
 CORS_ALLOW_CREDENTIALS = True
 
