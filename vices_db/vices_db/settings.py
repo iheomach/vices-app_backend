@@ -194,7 +194,6 @@ else:
     ]
 
 CORS_ALLOW_CREDENTIALS = True
-STATICFILES_STORAGE = 'whitenoise.storage.CompressedManifestStaticFilesStorage'
 STATICFILES_DIRS = []
 
 # Email settings
