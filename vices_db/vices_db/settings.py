@@ -99,7 +99,7 @@ WSGI_APPLICATION = 'vices_db.wsgi.application'
 
 # Database configuration
 # Temporarily use SQLite locally due to driver issues
-POSTGRES_LOCALLY = True  # Temporarily set to False
+POSTGRES_LOCALLY = False  # Temporarily set to False
 
 if ((os.getenv('RAILWAY_ENVIRONMENT_NAME') or os.getenv('RAILWAY_PROJECT_ID')) and dj_database_url and os.getenv('DATABASE_URL')) or POSTGRES_LOCALLY:
     if POSTGRES_LOCALLY and dj_database_url and os.getenv('DATABASE_URL'):
