@@ -181,7 +181,9 @@ REST_FRAMEWORK = {
 }
 
 # CORS settings
-CORS_ALLOWED_ORIGINS = ['https://vices-app.com', 'https://vices-app.com']
+CORS_ALLOWED_ORIGINS = [
+    'https://vices-app.com', 
+    'https://www.vices-app.com']
 
 CORS_ALLOW_CREDENTIALS = True
 
