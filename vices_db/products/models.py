@@ -4,7 +4,7 @@ from django.db import models
 class Product(models.Model):
     # Core product info
     name = models.CharField(max_length=200)
-    category = models.CharField(choices=[('cannabis', 'Cannabis'), ('alcohol', 'Alcohol')])
+    category = models.CharField(choices=[('cannabis', 'Cannabis'), ('alcohol', 'Alcohol')], max_length=50)
     product_type = models.CharField(max_length=50)  # flower, edible, wine, beer
     
     # Pricing (scraped data)
