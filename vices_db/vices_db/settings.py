@@ -55,6 +55,7 @@ INSTALLED_APPS = [
     'users',
     'tracking',
     'goals',
+    'products',
     'django.contrib.sites',
     'allauth',
     'allauth.account',
