@@ -65,6 +65,7 @@ INSTALLED_APPS = [
     'dj_rest_auth.registration',
 ]
 
+CSRF_TRUSTED_ORIGINS = ['vices-app.up.railway.app']
 MIDDLEWARE = [
     'corsheaders.middleware.CorsMiddleware',
     'django.middleware.security.SecurityMiddleware',
@@ -180,7 +181,7 @@ REST_FRAMEWORK = {
 }
 
 # CORS settings
-CORS_ALLOWED_ORIGINS = ['https://vices-app.up.railway.app']
+CORS_ALLOWED_ORIGINS = ['https://vices-app.com,https://www.vices-app.com', 'https://vices-app.com']
 
 CORS_ALLOW_CREDENTIALS = True
 
