@@ -30,7 +30,7 @@ IS_PRODUCTION = (
 
 # Security Settings
 DEBUG = os.getenv('DEBUG', 'True' if not IS_PRODUCTION else 'False').lower() == 'true'
-ALLOWED_HOSTS = os.getenv('ALLOWED_HOSTS', 'localhost,127.0.0.1,.railway.app,.render.com').split(',')
+ALLOWED_HOSTS = ['localhost', '127.0.0.1', 'vices-app.up.railway.app']  # Default to localhost for local development
 
 # Generate a new secret key for production
 SECRET_KEY = os.getenv('SECRET_KEY')
@@ -180,10 +180,7 @@ REST_FRAMEWORK = {
 }
 
 # CORS settings
-CORS_ALLOWED_ORIGINS = [
-    origin.strip() for origin in os.getenv('CORS_ALLOWED_ORIGINS', 
-        'http://localhost:3000,http://127.0.0.1:3000').split(',')
-]
+CORS_ALLOWED_ORIGINS = ['https://vices-app.up.railway.app']
 
 CORS_ALLOW_CREDENTIALS = True
 
