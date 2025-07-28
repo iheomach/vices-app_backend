@@ -26,6 +26,7 @@ urlpatterns = [
     path('api/goals/', include('goals.urls')),
     path('api/tracking/', include('tracking.urls')),
     path('api/openai/', generate_recommendations, name='openai_recommendations'),
+    path('api/payments/', include('payments.urls')),
     path('dj-rest-auth/', include('dj_rest_auth.urls')),
     path('dj-rest-auth/registration/', include('dj_rest_auth.registration.urls')),
     path('dj-rest-auth/social/', include('allauth.socialaccount.urls')),

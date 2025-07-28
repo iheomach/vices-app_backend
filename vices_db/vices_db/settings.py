@@ -32,6 +32,8 @@ IS_PRODUCTION = (
 DEBUG = os.getenv('DEBUG', 'True' if not IS_PRODUCTION else 'False').lower() == 'true'
 ALLOWED_HOSTS = ['localhost', '127.0.0.1', 'vices-app.up.railway.app']  # Default to localhost for local development
 
+STRIPE_SECRET_KEY = os.getenv('STRIPE_SECRET_KEY')
+STRIPE_PUBLISHABLE_KEY = os.getenv('STRIPE_PUBLISHABLE_KEY')
 # Generate a new secret key for production
 SECRET_KEY = os.getenv('SECRET_KEY')
 if not SECRET_KEY:
@@ -56,6 +58,7 @@ INSTALLED_APPS = [
     'tracking',
     'goals',
     'products',
+    'payments',
     'django.contrib.sites',
     'allauth',
     'allauth.account',
