@@ -4,7 +4,7 @@ from rest_framework.response import Response
 from django.contrib.auth import get_user_model
 from rest_framework import status
 from rest_framework.decorators import api_view, permission_classes
-from rest_framework.permissions import AllowAny
+from rest_framework.permissions import AllowAny, IsAuthenticated
 from django.contrib.auth.hashers import make_password
 from django.db import transaction
 from django.views.decorators.csrf import csrf_exempt
@@ -242,3 +242,27 @@ def public_request_password_reset(request):
         fail_silently=False,
     )
     return Response({'message': 'If this email exists, a code has been sent.'})
+
+@api_view(['POST'])
+@permission_classes([IsAuthenticated])
+def upgrade_to_premium(request):
+    user = request.user
+    data = request.data
+
+    # Optional: Check that the user_id matches the authenticated user
+    if str(user.id) != str(data.get('user_id')):
+        return Response({'error': 'User ID mismatch.'}, status=403)
+
+    # Optional: Verify payment_intent_id with Stripe here
+
+    # Upgrade user account
+    user.account_tier = 'premium'
+    user.save()
+
+    return Response({
+        'id': user.id,
+        'email': user.email,
+        'first_name': user.first_name,
+        'last_name': user.last_name,
+        'account_tier': user.account_tier,
+    }, status=200)

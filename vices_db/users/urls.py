@@ -1,5 +1,6 @@
 from django.urls import path
 from . import views
+from .views import upgrade_to_premium
 
 urlpatterns = [
     path('register/', views.register_user, name='register_user'),
@@ -8,4 +9,5 @@ urlpatterns = [
     path('request-password-change/', views.request_password_change, name='request_password_change'),
     path('confirm-password-change/', views.confirm_password_change, name='confirm_password_change'),
     path('public-request-password-reset/', views.public_request_password_reset, name='public_request_password_reset'),
+    path('upgrade-to-premium/', upgrade_to_premium, name='upgrade_to_premium'),
 ]

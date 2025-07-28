@@ -29,7 +29,7 @@ class User(AbstractUser):
     preferred_categories = models.JSONField(default=list, blank=True, help_text="e.g., ['cannabis', 'wine', 'beer', 'spirits']")
     tolerance_level = models.CharField(max_length=20, blank=True, help_text="Overall tolerance level")
     favorite_effects = models.JSONField(default=list, blank=True, help_text="e.g., ['relaxation', 'creativity', 'social']")
-    account_tier = models.CharField(max_length=20, blank=True, help_text="e.g., 'free', 'premium'")
+    account_tier = models.CharField(max_length=20, blank=True, default='free', help_text="e.g., 'free', 'premium'")
     consumption_goals = models.JSONField(default=list, blank=True, help_text="e.g., ['sleep', 'pain_relief', 'celebration']")
 
     # Account info
