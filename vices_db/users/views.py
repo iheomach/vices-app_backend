@@ -150,7 +150,8 @@ def login_user(request):
                 'email': user.email,
                 'first_name': user.first_name,
                 'last_name': user.last_name,
-                'username': user.username
+                'username': user.username,
+                'account_tier': user.account_tier,
             },
             'token': token.key  # ✅ RETURN REAL TOKEN
         }, status=status.HTTP_200_OK)
