@@ -165,3 +165,153 @@ def handle_subscription_updated(subscription):
         
     except Exception as e:
         print(f"Error handling subscription update: {str(e)}")
+
+# Complete Backend Views for Subscription Management
+# Add these functions to your payments/views.py
+
+# Make sure to import your custom User model:
+# from your_app.models import User  # Replace 'your_app' with your actual app name
+# Instead of: from django.contrib.auth.models import User
+
+@api_view(['GET'])
+def get_subscription_status(request, user_id):
+    """Get subscription status and billing history for a user"""
+    try:
+        if not request.user.is_authenticated:
+            return Response({'error': 'Authentication required'}, status=401)
+        
+        # Find user's customer in Stripe
+        customers = stripe.Customer.list(
+            metadata={'user_id': str(user_id)},
+            limit=1
+        )
+        
+        if not customers.data:
+            return Response({
+                'subscription': None,
+                'invoices': [],
+                'message': 'No subscription found'
+            })
+        
+        customer = customers.data[0]
+        
+        # Get subscriptions
+        subscriptions = stripe.Subscription.list(
+            customer=customer.id,
+            status='all',
+            limit=1
+        )
+        
+        subscription_data = None
+        if subscriptions.data:
+            sub = subscriptions.data[0]
+            subscription_data = {
+                'id': sub.id,
+                'status': sub.status,
+                'current_period_start': sub.current_period_start,
+                'current_period_end': sub.current_period_end,
+                'cancel_at_period_end': sub.cancel_at_period_end,
+                'plan': {
+                    'amount': sub.plan.amount if hasattr(sub, 'plan') else sub.items.data[0].price.unit_amount,
+                    'currency': sub.plan.currency if hasattr(sub, 'plan') else sub.items.data[0].price.currency,
+                    'interval': sub.plan.interval if hasattr(sub, 'plan') else sub.items.data[0].price.recurring.interval,
+                }
+            }
+        
+        # Get invoices
+        invoices = stripe.Invoice.list(
+            customer=customer.id,
+            limit=10
+        )
+        
+        invoice_data = []
+        for invoice in invoices.data:
+            invoice_data.append({
+                'id': invoice.id,
+                'amount_paid': invoice.amount_paid,
+                'currency': invoice.currency,
+                'status': invoice.status,
+                'created': invoice.created,
+                'hosted_invoice_url': invoice.hosted_invoice_url,
+                'invoice_pdf': invoice.invoice_pdf,
+            })
+        
+        return Response({
+            'subscription': subscription_data,
+            'invoices': invoice_data,
+            'customer_id': customer.id
+        })
+        
+    except stripe.error.StripeError as e:
+        return Response({'error': f'Stripe error: {str(e)}'}, status=400)
+    except Exception as e:
+        return Response({'error': f'Server error: {str(e)}'}, status=500)
+
+@api_view(['POST'])
+def cancel_subscription(request):
+    """Cancel a subscription"""
+    try:
+        if not request.user.is_authenticated:
+            return Response({'error': 'Authentication required'}, status=401)
+        
+        data = request.data
+        subscription_id = data.get('subscription_id')
+        user_id = data.get('user_id')
+        
+        if not subscription_id:
+            return Response({'error': 'Subscription ID required'}, status=400)
+        
+        # Cancel subscription at period end
+        subscription = stripe.Subscription.modify(
+            subscription_id,
+            cancel_at_period_end=True
+        )
+        
+        print(f"Subscription {subscription_id} marked for cancellation at period end")
+        
+        return Response({
+            'message': 'Subscription will be cancelled at the end of the current period',
+            'subscription_id': subscription.id,
+            'cancel_at_period_end': subscription.cancel_at_period_end,
+            'current_period_end': subscription.current_period_end
+        })
+        
+    except stripe.error.StripeError as e:
+        return Response({'error': f'Stripe error: {str(e)}'}, status=400)
+    except Exception as e:
+        return Response({'error': f'Server error: {str(e)}'}, status=500)
+
+@api_view(['POST'])
+def reactivate_subscription(request):
+    """Reactivate a cancelled subscription"""
+    try:
+        if not request.user.is_authenticated:
+            return Response({'error': 'Authentication required'}, status=401)
+        
+        data = request.data
+        subscription_id = data.get('subscription_id')
+        user_id = data.get('user_id')
+        
+        if not subscription_id:
+            return Response({'error': 'Subscription ID required'}, status=400)
+        
+        # Reactivate subscription
+        subscription = stripe.Subscription.modify(
+            subscription_id,
+            cancel_at_period_end=False
+        )
+        
+        print(f"Subscription {subscription_id} reactivated")
+        
+        return Response({
+            'message': 'Subscription reactivated successfully',
+            'subscription_id': subscription.id,
+            'cancel_at_period_end': subscription.cancel_at_period_end,
+            'status': subscription.status
+        })
+        
+    except stripe.error.StripeError as e:
+        return Response({'error': f'Stripe error: {str(e)}'}, status=400)
+    except Exception as e:
+        return Response({'error': f'Server error: {str(e)}'}, status=500)
+
