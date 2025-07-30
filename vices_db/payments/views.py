@@ -15,43 +15,55 @@ stripe.api_key = settings.STRIPE_SECRET_KEY
 def create_subscription(request):
     try:
         # ✅ Get data from request
+
         data = request.data
         price_id = data.get('price_id')
         user_id = data.get('user_id')
         email = data.get('email')
-        
-        print(f"🔍 Creating subscription with: price_id={price_id}, user_id={user_id}, email={email}")
-        
-        if not price_id or not email:
+        payment_method_id = data.get('payment_method_id')  # NEW
+
+        print(f"🔍 Creating subscription with: price_id={price_id}, user_id={user_id}, email={email}, payment_method_id={payment_method_id}")
+
+        if not price_id or not email or not payment_method_id:
             return Response({'error': 'Missing required fields'}, status=400)
-        
+
         # Check if customer exists by email first
         customers = stripe.Customer.list(email=email, limit=1)
         if customers.data:
             customer = customers.data[0]
             print(f"Found existing customer: {customer.id}")
         else:
-            # Create customer without problematic metadata
             customer_data = {'email': email}
             if user_id:
                 customer_data['metadata'] = {'user_id': str(user_id)}
-                
             customer = stripe.Customer.create(**customer_data)
             print(f"Created new customer: {customer.id}")
-        
 
-        # ✅ CREATE THE SUBSCRIPTION (this was missing!)
+        # Attach payment method to customer
+        try:
+            stripe.PaymentMethod.attach(
+                payment_method_id,
+                customer=customer.id,
+            )
+        except stripe.error.InvalidRequestError as e:
+            print(f"PaymentMethod attach error: {e}")
+            # If already attached, ignore
+        # Set as default payment method
+        stripe.Customer.modify(
+            customer.id,
+            invoice_settings={'default_payment_method': payment_method_id},
+        )
+
+        # Create the subscription
         subscription = stripe.Subscription.create(
             customer=customer.id,
-            items=[{
-                'price': price_id,
-            }],
+            items=[{'price': price_id}],
+            default_payment_method=payment_method_id,
             payment_behavior='default_incomplete',
             payment_settings={'save_default_payment_method': 'on_subscription'},
             expand=['latest_invoice.payment_intent'],
         )
 
-        # Debug: Print the full subscription object
         print("Stripe subscription object:", subscription)
         latest_invoice = getattr(subscription, 'latest_invoice', None)
         print("latest_invoice:", latest_invoice)
