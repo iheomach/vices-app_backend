@@ -67,8 +67,28 @@ def create_subscription(request):
         print("Stripe subscription object:", subscription)
         latest_invoice = getattr(subscription, 'latest_invoice', None)
         print("latest_invoice:", latest_invoice)
+
         payment_intent = getattr(latest_invoice, 'payment_intent', None) if latest_invoice else None
         print("payment_intent:", payment_intent)
+
+        # If payment_intent is None, try to fetch and finalize the invoice
+        if not payment_intent and latest_invoice:
+            invoice_id = latest_invoice.id if hasattr(latest_invoice, 'id') else latest_invoice.get('id')
+            print(f"Attempting to fetch and finalize invoice: {invoice_id}")
+            try:
+                # Fetch the latest invoice from Stripe
+                invoice = stripe.Invoice.retrieve(invoice_id, expand=['payment_intent'])
+                print("Fetched invoice:", invoice)
+                if not invoice.payment_intent:
+                    # Finalize the invoice if not already finalized
+                    if invoice.status == 'draft':
+                        invoice = stripe.Invoice.finalize_invoice(invoice_id, expand=['payment_intent'])
+                        print("Finalized invoice:", invoice)
+                payment_intent = invoice.payment_intent
+                print("Fetched payment_intent from invoice:", payment_intent)
+            except Exception as e:
+                print(f"Error fetching/finalizing invoice: {e}")
+
         client_secret = getattr(payment_intent, 'client_secret', None) if payment_intent else None
         print("client_secret:", client_secret)
 
