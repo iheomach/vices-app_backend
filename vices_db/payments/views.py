@@ -110,17 +110,21 @@ def get_subscription_status(request, user_id):
         subscription_data = None
         if subscriptions.data:
             sub = subscriptions.data[0]
+            
+            # Get the first subscription item (there's usually only one)
+            subscription_item = sub.items.data[0] if sub.items.data else None
+            
             subscription_data = {
                 'id': sub.id,
                 'status': sub.status,
-                'current_period_start': sub.current_period_start,
-                'current_period_end': sub.current_period_end,
+                'current_period_start': subscription_item.current_period_start if subscription_item else None,
+                'current_period_end': subscription_item.current_period_end if subscription_item else None,
                 'cancel_at_period_end': sub.cancel_at_period_end,
                 'plan': {
-                    'amount': sub.plan.amount if hasattr(sub, 'plan') else sub.items.data[0].price.unit_amount,
-                    'currency': sub.plan.currency if hasattr(sub, 'plan') else sub.items.data[0].price.currency,
-                    'interval': sub.plan.interval if hasattr(sub, 'plan') else sub.items.data[0].price.recurring.interval,
-                }
+                    'amount': subscription_item.price.unit_amount if subscription_item else None,
+                    'currency': subscription_item.price.currency if subscription_item else 'usd',
+                    'interval': subscription_item.price.recurring.interval if subscription_item else 'month',
+                } if subscription_item else None
             }
         
         # Get invoices
