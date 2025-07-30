@@ -19,34 +19,24 @@ def create_subscription(request):
         email = data.get('email')
         payment_method_id = data.get('payment_method_id')
 
-        print(f"🔍 Creating subscription with: price_id={price_id}, user_id={user_id}, email={email}, payment_method_id={payment_method_id}")
-
         if not price_id or not email or not payment_method_id:
             return Response({'error': 'Missing required fields'}, status=400)
 
-        # Check if customer exists by email first
+        # Create or get customer
         customers = stripe.Customer.list(email=email, limit=1)
         if customers.data:
             customer = customers.data[0]
-            print(f"Found existing customer: {customer.id}")
         else:
             customer_data = {'email': email}
             if user_id:
                 customer_data['metadata'] = {'user_id': str(user_id)}
             customer = stripe.Customer.create(**customer_data)
-            print(f"Created new customer: {customer.id}")
 
-        # Attach payment method to customer
+        # Attach payment method
         try:
-            stripe.PaymentMethod.attach(
-                payment_method_id,
-                customer=customer.id,
-            )
-            print(f"Payment method {payment_method_id} attached to customer {customer.id}")
-        except stripe.error.InvalidRequestError as e:
-            if "already attached" not in str(e).lower():
-                print(f"PaymentMethod attach error: {e}")
-                return Response({'error': f'Payment method error: {str(e)}'}, status=400)
+            stripe.PaymentMethod.attach(payment_method_id, customer=customer.id)
+        except stripe.error.InvalidRequestError:
+            pass  # Already attached
 
         # Set as default payment method
         stripe.Customer.modify(
@@ -54,80 +44,32 @@ def create_subscription(request):
             invoice_settings={'default_payment_method': payment_method_id},
         )
 
-        # Create the subscription with simplified approach
+        # Create subscription - let Stripe handle payment automatically
         subscription = stripe.Subscription.create(
             customer=customer.id,
             items=[{'price': price_id}],
             default_payment_method=payment_method_id,
-            payment_behavior='default_incomplete',
-            expand=['latest_invoice.payment_intent', 'pending_setup_intent'],
+            # No payment_behavior specified - Stripe will charge immediately if possible
         )
 
-        print(f"Subscription created: {subscription.id}")
-        print(f"Subscription status: {subscription.status}")
+        print(f"✅ Subscription created: {subscription.id} with status: {subscription.status}")
 
-        # Extract client_secret more reliably
-        client_secret = None
-        
-        # First, try to get from latest_invoice.payment_intent
-        if (hasattr(subscription, 'latest_invoice') and 
-            subscription.latest_invoice and 
-            hasattr(subscription.latest_invoice, 'payment_intent') and
-            subscription.latest_invoice.payment_intent):
-            client_secret = subscription.latest_invoice.payment_intent.client_secret
-            print(f"Got client_secret from payment_intent: {client_secret}")
-        
-        # If no payment_intent, try pending_setup_intent
-        elif (hasattr(subscription, 'pending_setup_intent') and 
-              subscription.pending_setup_intent):
-            client_secret = subscription.pending_setup_intent.client_secret
-            print(f"Got client_secret from setup_intent: {client_secret}")
-        
-        # Last resort: manually fetch the invoice
-        elif subscription.latest_invoice:
-            try:
-                invoice_id = subscription.latest_invoice.id if hasattr(subscription.latest_invoice, 'id') else subscription.latest_invoice
-                invoice = stripe.Invoice.retrieve(invoice_id, expand=['payment_intent'])
-                
-                if invoice.payment_intent:
-                    client_secret = invoice.payment_intent.client_secret
-                    print(f"Got client_secret from fetched invoice: {client_secret}")
-                else:
-                    # Try to finalize the invoice if it's still draft
-                    if invoice.status == 'draft':
-                        finalized_invoice = stripe.Invoice.finalize_invoice(invoice_id, expand=['payment_intent'])
-                        if finalized_invoice.payment_intent:
-                            client_secret = finalized_invoice.payment_intent.client_secret
-                            print(f"Got client_secret from finalized invoice: {client_secret}")
-            except Exception as e:
-                print(f"Error retrieving invoice: {e}")
-
-        if not client_secret:
-            print("❌ No client_secret found")
-            return Response({
-                'error': 'Payment setup incomplete. Please try again.',
-                'debug_info': {
-                    'subscription_id': subscription.id,
-                    'subscription_status': subscription.status,
-                    'has_latest_invoice': bool(subscription.latest_invoice),
-                    'has_pending_setup_intent': bool(getattr(subscription, 'pending_setup_intent', None))
-                }
-            }, status=500)
-
+        # For immediate charging, we don't need client_secret
+        # Stripe will either charge successfully or fail with an error
         return Response({
             'subscription_id': subscription.id,
-            'client_secret': client_secret,
+            'client_secret': None,  # Not needed for immediate charging
             'status': subscription.status,
-            'customer_id': customer.id
+            'customer_id': customer.id,
+            'message': 'Subscription created successfully'
         })
             
     except stripe.error.StripeError as e:
-        print(f"Stripe error: {e}")
+        print(f"❌ Stripe error: {e}")
         return Response({'error': f'Stripe error: {str(e)}'}, status=400)
     except Exception as e:
-        print(f"Server error: {e}")
+        print(f"❌ Server error: {e}")
         return Response({'error': f'Server error: {str(e)}'}, status=500)
-
 @api_view(['GET'])
 def get_subscription_status(request, user_id):
     """Get subscription status and billing history for a user"""
