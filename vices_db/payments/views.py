@@ -10,17 +10,14 @@ from django.contrib.auth import get_user_model
 User = get_user_model()
 
 stripe.api_key = settings.STRIPE_SECRET_KEY
-
 @api_view(['POST'])
 def create_subscription(request):
     try:
-        # ✅ Get data from request
-
         data = request.data
         price_id = data.get('price_id')
         user_id = data.get('user_id')
         email = data.get('email')
-        payment_method_id = data.get('payment_method_id')  # NEW
+        payment_method_id = data.get('payment_method_id')
 
         print(f"🔍 Creating subscription with: price_id={price_id}, user_id={user_id}, email={email}, payment_method_id={payment_method_id}")
 
@@ -45,55 +42,77 @@ def create_subscription(request):
                 payment_method_id,
                 customer=customer.id,
             )
+            print(f"Payment method {payment_method_id} attached to customer {customer.id}")
         except stripe.error.InvalidRequestError as e:
-            print(f"PaymentMethod attach error: {e}")
-            # If already attached, ignore
+            if "already attached" not in str(e).lower():
+                print(f"PaymentMethod attach error: {e}")
+                return Response({'error': f'Payment method error: {str(e)}'}, status=400)
+
         # Set as default payment method
         stripe.Customer.modify(
             customer.id,
             invoice_settings={'default_payment_method': payment_method_id},
         )
 
-        # Create the subscription
+        # Create the subscription with simplified approach
         subscription = stripe.Subscription.create(
             customer=customer.id,
             items=[{'price': price_id}],
             default_payment_method=payment_method_id,
             payment_behavior='default_incomplete',
-            payment_settings={'save_default_payment_method': 'on_subscription'},
-            expand=['latest_invoice.payment_intent'],
+            expand=['latest_invoice.payment_intent', 'pending_setup_intent'],
         )
 
-        print("Stripe subscription object:", subscription)
-        latest_invoice = getattr(subscription, 'latest_invoice', None)
-        print("latest_invoice:", latest_invoice)
+        print(f"Subscription created: {subscription.id}")
+        print(f"Subscription status: {subscription.status}")
 
-        payment_intent = getattr(latest_invoice, 'payment_intent', None) if latest_invoice else None
-        print("payment_intent:", payment_intent)
-
-        # If payment_intent is None, try to fetch and finalize the invoice
-        if not payment_intent and latest_invoice:
-            invoice_id = latest_invoice.id if hasattr(latest_invoice, 'id') else latest_invoice.get('id')
-            print(f"Attempting to fetch and finalize invoice: {invoice_id}")
+        # Extract client_secret more reliably
+        client_secret = None
+        
+        # First, try to get from latest_invoice.payment_intent
+        if (hasattr(subscription, 'latest_invoice') and 
+            subscription.latest_invoice and 
+            hasattr(subscription.latest_invoice, 'payment_intent') and
+            subscription.latest_invoice.payment_intent):
+            client_secret = subscription.latest_invoice.payment_intent.client_secret
+            print(f"Got client_secret from payment_intent: {client_secret}")
+        
+        # If no payment_intent, try pending_setup_intent
+        elif (hasattr(subscription, 'pending_setup_intent') and 
+              subscription.pending_setup_intent):
+            client_secret = subscription.pending_setup_intent.client_secret
+            print(f"Got client_secret from setup_intent: {client_secret}")
+        
+        # Last resort: manually fetch the invoice
+        elif subscription.latest_invoice:
             try:
-                # Fetch the latest invoice from Stripe
+                invoice_id = subscription.latest_invoice.id if hasattr(subscription.latest_invoice, 'id') else subscription.latest_invoice
                 invoice = stripe.Invoice.retrieve(invoice_id, expand=['payment_intent'])
-                print("Fetched invoice:", invoice)
-                if not invoice.payment_intent:
-                    # Finalize the invoice if not already finalized
+                
+                if invoice.payment_intent:
+                    client_secret = invoice.payment_intent.client_secret
+                    print(f"Got client_secret from fetched invoice: {client_secret}")
+                else:
+                    # Try to finalize the invoice if it's still draft
                     if invoice.status == 'draft':
-                        invoice = stripe.Invoice.finalize_invoice(invoice_id, expand=['payment_intent'])
-                        print("Finalized invoice:", invoice)
-                payment_intent = invoice.payment_intent
-                print("Fetched payment_intent from invoice:", payment_intent)
+                        finalized_invoice = stripe.Invoice.finalize_invoice(invoice_id, expand=['payment_intent'])
+                        if finalized_invoice.payment_intent:
+                            client_secret = finalized_invoice.payment_intent.client_secret
+                            print(f"Got client_secret from finalized invoice: {client_secret}")
             except Exception as e:
-                print(f"Error fetching/finalizing invoice: {e}")
-
-        client_secret = getattr(payment_intent, 'client_secret', None) if payment_intent else None
-        print("client_secret:", client_secret)
+                print(f"Error retrieving invoice: {e}")
 
         if not client_secret:
-            return Response({'error': 'Stripe did not return a payment intent. Please check your Stripe configuration.'}, status=500)
+            print("❌ No client_secret found")
+            return Response({
+                'error': 'Payment setup incomplete. Please try again.',
+                'debug_info': {
+                    'subscription_id': subscription.id,
+                    'subscription_status': subscription.status,
+                    'has_latest_invoice': bool(subscription.latest_invoice),
+                    'has_pending_setup_intent': bool(getattr(subscription, 'pending_setup_intent', None))
+                }
+            }, status=500)
 
         return Response({
             'subscription_id': subscription.id,
