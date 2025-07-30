@@ -70,6 +70,7 @@ def create_subscription(request):
     except Exception as e:
         print(f"❌ Server error: {e}")
         return Response({'error': f'Server error: {str(e)}'}, status=500)
+
 @api_view(['GET'])
 def get_subscription_status(request, user_id):
     """Get subscription status and billing history for a user"""
@@ -99,7 +100,6 @@ def get_subscription_status(request, user_id):
         
         print(f"🔍 Found customer: {customer.id}")
         
-        # ✅ DON'T override customer variable here
         # Get subscriptions
         subscriptions = stripe.Subscription.list(
             customer=customer.id,
@@ -114,12 +114,37 @@ def get_subscription_status(request, user_id):
             # Get the first subscription item (there's usually only one)
             subscription_item = sub.items.data[0] if sub.items.data else None
             
+            # ✅ FIXED: Access current_period_start/end from subscription object, not subscription_item
             subscription_data = {
                 'id': sub.id,
+                'object': sub.object,
                 'status': sub.status,
-                'current_period_start': subscription_item.current_period_start if subscription_item else None,
-                'current_period_end': subscription_item.current_period_end if subscription_item else None,
+                'current_period_start': sub.current_period_start,  # ✅ From subscription object
+                'current_period_end': sub.current_period_end,      # ✅ From subscription object
                 'cancel_at_period_end': sub.cancel_at_period_end,
+                'created': sub.created,
+                'customer': sub.customer,
+                # Include items structure for frontend compatibility
+                'items': {
+                    'object': 'list',
+                    'data': [{
+                        'id': subscription_item.id,
+                        'object': 'subscription_item',
+                        'price': {
+                            'id': subscription_item.price.id,
+                            'object': 'price',
+                            'active': subscription_item.price.active,
+                            'unit_amount': subscription_item.price.unit_amount,
+                            'currency': subscription_item.price.currency,
+                            'recurring': {
+                                'interval': subscription_item.price.recurring.interval,
+                                'interval_count': subscription_item.price.recurring.interval_count,
+                            }
+                        },
+                        'quantity': subscription_item.quantity,
+                    }]
+                } if subscription_item else {'object': 'list', 'data': []},
+                # Legacy plan object for backward compatibility
                 'plan': {
                     'amount': subscription_item.price.unit_amount if subscription_item else None,
                     'currency': subscription_item.price.currency if subscription_item else 'usd',
