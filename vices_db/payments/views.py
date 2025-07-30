@@ -228,11 +228,13 @@ def cancel_subscription(request):
             cancel_at_period_end=True
         )
         
+        print(f"✅ Subscription {subscription_id} cancelled - cancel_at_period_end: {subscription.cancel_at_period_end}")
+        
         return Response({
             'message': 'Subscription will be cancelled at the end of the current period',
             'subscription_id': subscription.id,
-            'cancel_at_period_end': subscription.cancel_at_period_end,
-            'current_period_end': subscription.current_period_end
+            'cancel_at_period_end': getattr(subscription, 'cancel_at_period_end', True),
+            'current_period_end': getattr(subscription, 'current_period_end', None)
         })
         
     except stripe.error.StripeError as e:
@@ -258,11 +260,13 @@ def reactivate_subscription(request):
             cancel_at_period_end=False
         )
         
+        print(f"✅ Subscription {subscription_id} reactivated - cancel_at_period_end: {subscription.cancel_at_period_end}")
+        
         return Response({
             'message': 'Subscription reactivated successfully',
             'subscription_id': subscription.id,
-            'cancel_at_period_end': subscription.cancel_at_period_end,
-            'status': subscription.status
+            'cancel_at_period_end': getattr(subscription, 'cancel_at_period_end', False),
+            'status': getattr(subscription, 'status', 'active')
         })
         
     except stripe.error.StripeError as e:
