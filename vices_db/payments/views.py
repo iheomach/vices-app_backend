@@ -49,10 +49,18 @@ def create_subscription(request):
             payment_settings={'save_default_payment_method': 'on_subscription'},
             expand=['latest_invoice.payment_intent'],
         )
-        
+
+        # Defensive: Check for latest_invoice and payment_intent
+        latest_invoice = getattr(subscription, 'latest_invoice', None)
+        payment_intent = getattr(latest_invoice, 'payment_intent', None) if latest_invoice else None
+        client_secret = getattr(payment_intent, 'client_secret', None) if payment_intent else None
+
+        if not client_secret:
+            return Response({'error': 'Stripe did not return a payment intent. Please check your Stripe configuration.'}, status=500)
+
         return Response({
             'subscription_id': subscription.id,
-            'client_secret': subscription.latest_invoice.payment_intent.client_secret,
+            'client_secret': client_secret,
             'status': subscription.status,
             'customer_id': customer.id
         })
