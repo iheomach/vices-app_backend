@@ -39,6 +39,7 @@ def create_subscription(request):
             customer = stripe.Customer.create(**customer_data)
             print(f"Created new customer: {customer.id}")
         
+
         # ✅ CREATE THE SUBSCRIPTION (this was missing!)
         subscription = stripe.Subscription.create(
             customer=customer.id,
@@ -50,10 +51,14 @@ def create_subscription(request):
             expand=['latest_invoice.payment_intent'],
         )
 
-        # Defensive: Check for latest_invoice and payment_intent
+        # Debug: Print the full subscription object
+        print("Stripe subscription object:", subscription)
         latest_invoice = getattr(subscription, 'latest_invoice', None)
+        print("latest_invoice:", latest_invoice)
         payment_intent = getattr(latest_invoice, 'payment_intent', None) if latest_invoice else None
+        print("payment_intent:", payment_intent)
         client_secret = getattr(payment_intent, 'client_secret', None) if payment_intent else None
+        print("client_secret:", client_secret)
 
         if not client_secret:
             return Response({'error': 'Stripe did not return a payment intent. Please check your Stripe configuration.'}, status=500)
