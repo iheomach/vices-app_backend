@@ -79,6 +79,7 @@ def get_subscription_status(request, user_id):
             return Response({'error': 'Authentication required'}, status=401)
         
         print(f"🔍 Looking for customer with user_id: {user_id} (type: {type(user_id)})")
+        print(f"🔍 Authenticated user: {request.user.id}")
         
         # Search for customer correctly
         customers = stripe.Customer.list(limit=100)
@@ -110,65 +111,93 @@ def get_subscription_status(request, user_id):
         subscription_data = None
         if subscriptions.data:
             sub = subscriptions.data[0]
+            print(f"🔍 Processing subscription: {sub.id}")
             
             # Get the first subscription item (there's usually only one)
-            subscription_item = sub.items.data[0] if sub.items.data else None
+            subscription_item = None
+            if hasattr(sub, 'items') and sub.items and hasattr(sub.items, 'data') and sub.items.data:
+                subscription_item = sub.items.data[0]
+                print(f"🔍 Found subscription item: {subscription_item.id}")
+            else:
+                print("🔍 No subscription items found")
             
-            # ✅ FIXED: Access current_period_start/end from subscription object, not subscription_item
+            # Build subscription data with defensive checks
             subscription_data = {
                 'id': sub.id,
-                'object': sub.object,
-                'status': sub.status,
-                'current_period_start': sub.current_period_start,  # ✅ From subscription object
-                'current_period_end': sub.current_period_end,      # ✅ From subscription object
-                'cancel_at_period_end': sub.cancel_at_period_end,
-                'created': sub.created,
-                'customer': sub.customer,
-                # Include items structure for frontend compatibility
-                'items': {
-                    'object': 'list',
-                    'data': [{
-                        'id': subscription_item.id,
-                        'object': 'subscription_item',
-                        'price': {
-                            'id': subscription_item.price.id,
-                            'object': 'price',
-                            'active': subscription_item.price.active,
-                            'unit_amount': subscription_item.price.unit_amount,
-                            'currency': subscription_item.price.currency,
-                            'recurring': {
-                                'interval': subscription_item.price.recurring.interval,
-                                'interval_count': subscription_item.price.recurring.interval_count,
-                            }
-                        },
-                        'quantity': subscription_item.quantity,
-                    }]
-                } if subscription_item else {'object': 'list', 'data': []},
-                # Legacy plan object for backward compatibility
-                'plan': {
-                    'amount': subscription_item.price.unit_amount if subscription_item else None,
-                    'currency': subscription_item.price.currency if subscription_item else 'usd',
-                    'interval': subscription_item.price.recurring.interval if subscription_item else 'month',
-                } if subscription_item else None
+                'object': getattr(sub, 'object', 'subscription'),
+                'status': getattr(sub, 'status', 'unknown'),
+                'current_period_start': getattr(sub, 'current_period_start', None),
+                'current_period_end': getattr(sub, 'current_period_end', None),
+                'cancel_at_period_end': getattr(sub, 'cancel_at_period_end', False),
+                'created': getattr(sub, 'created', None),
+                'customer': getattr(sub, 'customer', None),
             }
+            
+            # Add items structure if subscription_item exists
+            if subscription_item:
+                try:
+                    subscription_data['items'] = {
+                        'object': 'list',
+                        'data': [{
+                            'id': subscription_item.id,
+                            'object': 'subscription_item',
+                            'price': {
+                                'id': subscription_item.price.id,
+                                'object': 'price',
+                                'active': getattr(subscription_item.price, 'active', True),
+                                'unit_amount': getattr(subscription_item.price, 'unit_amount', 0),
+                                'currency': getattr(subscription_item.price, 'currency', 'usd'),
+                                'recurring': {
+                                    'interval': getattr(subscription_item.price.recurring, 'interval', 'month'),
+                                    'interval_count': getattr(subscription_item.price.recurring, 'interval_count', 1),
+                                }
+                            },
+                            'quantity': getattr(subscription_item, 'quantity', 1),
+                        }]
+                    }
+                    
+                    # Legacy plan object for backward compatibility
+                    subscription_data['plan'] = {
+                        'amount': getattr(subscription_item.price, 'unit_amount', 0),
+                        'currency': getattr(subscription_item.price, 'currency', 'usd'),
+                        'interval': getattr(subscription_item.price.recurring, 'interval', 'month'),
+                    }
+                except Exception as item_error:
+                    print(f"Error processing subscription item: {item_error}")
+                    subscription_data['items'] = {'object': 'list', 'data': []}
+                    subscription_data['plan'] = None
+            else:
+                subscription_data['items'] = {'object': 'list', 'data': []}
+                subscription_data['plan'] = None
         
         # Get invoices
-        invoices = stripe.Invoice.list(
-            customer=customer.id,
-            limit=10
-        )
+        print(f"🔍 Fetching invoices for customer: {customer.id}")
+        try:
+            invoices = stripe.Invoice.list(
+                customer=customer.id,
+                limit=10
+            )
+            print(f"🔍 Found {len(invoices.data)} invoices")
+        except Exception as invoice_error:
+            print(f"Error fetching invoices: {invoice_error}")
+            invoices = None
         
         invoice_data = []
-        for invoice in invoices.data:
-            invoice_data.append({
-                'id': invoice.id,
-                'amount_paid': invoice.amount_paid,
-                'currency': invoice.currency,
-                'status': invoice.status,
-                'created': invoice.created,
-                'hosted_invoice_url': invoice.hosted_invoice_url,
-                'invoice_pdf': invoice.invoice_pdf,
-            })
+        if invoices and invoices.data:
+            for invoice in invoices.data:
+                try:
+                    invoice_data.append({
+                        'id': getattr(invoice, 'id', None),
+                        'amount_paid': getattr(invoice, 'amount_paid', 0),
+                        'currency': getattr(invoice, 'currency', 'usd'),
+                        'status': getattr(invoice, 'status', 'unknown'),
+                        'created': getattr(invoice, 'created', None),
+                        'hosted_invoice_url': getattr(invoice, 'hosted_invoice_url', None),
+                        'invoice_pdf': getattr(invoice, 'invoice_pdf', None),
+                    })
+                except Exception as item_error:
+                    print(f"Error processing invoice item: {item_error}")
+                    continue
         
         return Response({
             'subscription': subscription_data,
